@@ -1,0 +1,116 @@
+name: devsecops-demo
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  APP_DIR: app
+
+jobs:
+  fast-feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install app dependencies
+        working-directory: app
+        run: npm install
+
+      - name: Run unit tests
+        working-directory: app
+        run: npm test
+
+  deep-scans:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    needs: fast-feedback
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Package repository source
+        run: ./scripts/package_source.sh
+
+      - name: Upload source bundle to S3
+        env:
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+        run: |
+          aws s3 cp source-bundle.zip "s3://${ARTIFACT_BUCKET}/sources/${GITHUB_SHA}.zip"
+
+      - name: Start SCA and SAST build
+        id: sca_sast
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          CODEBUILD_PROJECT_NAME: ${{ vars.CODEBUILD_PROJECT_NAME }}
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          REPORT_PREFIX: ${{ vars.REPORT_PREFIX }}
+          ENABLE_SECURITY_HUB_IMPORT: ${{ vars.ENABLE_SECURITY_HUB_IMPORT }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          BUILD_ID=$(aws codebuild start-build \
+            --project-name "${CODEBUILD_PROJECT_NAME}" \
+            --source-type-override S3 \
+            --source-location-override "${ARTIFACT_BUCKET}/sources/${GITHUB_SHA}.zip" \
+            --buildspec-override "ci/buildspecs/sca-sast.yml" \
+            --environment-variables-override \
+              name=REPORT_BUCKET,value="${ARTIFACT_BUCKET}",type=PLAINTEXT \
+              name=REPORT_PREFIX,value="${REPORT_PREFIX}",type=PLAINTEXT \
+              name=ENABLE_SECURITY_HUB_IMPORT,value="${ENABLE_SECURITY_HUB_IMPORT}",type=PLAINTEXT \
+              name=GIT_SHA,value="${GITHUB_SHA}",type=PLAINTEXT \
+              name=NVD_API_KEY,value="${NVD_API_KEY}",type=PLAINTEXT \
+            --query 'build.id' \
+            --output text)
+          echo "build_id=${BUILD_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for SCA and SAST build
+        env:
+          BUILD_ID: ${{ steps.sca_sast.outputs.build_id }}
+        run: ./scripts/wait_for_codebuild.sh "${BUILD_ID}"
+
+      - name: Start DAST build
+        id: dast
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          CODEBUILD_PROJECT_NAME: ${{ vars.CODEBUILD_PROJECT_NAME }}
+          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          REPORT_PREFIX: ${{ vars.REPORT_PREFIX }}
+          ENABLE_SECURITY_HUB_IMPORT: ${{ vars.ENABLE_SECURITY_HUB_IMPORT }}
+        run: |
+          BUILD_ID=$(aws codebuild start-build \
+            --project-name "${CODEBUILD_PROJECT_NAME}" \
+            --source-type-override S3 \
+            --source-location-override "${ARTIFACT_BUCKET}/sources/${GITHUB_SHA}.zip" \
+            --buildspec-override "ci/buildspecs/dast.yml" \
+            --environment-variables-override \
+              name=REPORT_BUCKET,value="${ARTIFACT_BUCKET}",type=PLAINTEXT \
+              name=REPORT_PREFIX,value="${REPORT_PREFIX}",type=PLAINTEXT \
+              name=ENABLE_SECURITY_HUB_IMPORT,value="${ENABLE_SECURITY_HUB_IMPORT}",type=PLAINTEXT \
+              name=GIT_SHA,value="${GITHUB_SHA}",type=PLAINTEXT \
+            --query 'build.id' \
+            --output text)
+          echo "build_id=${BUILD_ID}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for DAST build
+        env:
+          BUILD_ID: ${{ steps.dast.outputs.build_id }}
+        run: ./scripts/wait_for_codebuild.sh "${BUILD_ID}"

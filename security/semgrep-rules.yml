@@ -1,0 +1,19 @@
+rules:
+  - id: demo-node-eval
+    message: Avoid eval in application code.
+    severity: ERROR
+    languages: [javascript]
+    pattern: eval(...)
+    metadata:
+      category: security
+      technology: [nodejs]
+
+  - id: demo-node-child-process-exec
+    message: Avoid unsanitized command execution.
+    severity: ERROR
+    languages: [javascript]
+    pattern: exec(...)
+    metadata:
+      category: security
+      technology: [nodejs]
+

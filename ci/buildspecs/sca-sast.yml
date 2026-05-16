@@ -1,0 +1,42 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+      python: 3.11
+      java: corretto17
+    commands:
+      - mkdir -p reports/sca reports/sast reports/asff reports/meta
+      - pip3 install --quiet semgrep
+      - curl -sSL -o /tmp/dependency-check.zip https://github.com/jeremylong/DependencyCheck/releases/download/v9.0.9/dependency-check-9.0.9-release.zip
+      - unzip -q /tmp/dependency-check.zip -d /tmp
+      - cd app
+      - npm install
+      - cd "$CODEBUILD_SRC_DIR"
+  pre_build:
+    commands:
+      - cd app
+      - npm test
+      - cd "$CODEBUILD_SRC_DIR"
+  build:
+    commands:
+      - semgrep --config security/semgrep-rules.yml --json --output reports/sast/semgrep.json app/src || true
+      - |
+        /tmp/dependency-check/bin/dependency-check.sh \
+          --project "aws-devsecops-demo" \
+          --scan app \
+          --format JSON \
+          --out reports/sca \
+          ${NVD_API_KEY:+--nvdApiKey "$NVD_API_KEY"} || true
+  post_build:
+    commands:
+      - python3 scripts/convert_findings.py --kind semgrep --input reports/sast/semgrep.json --output reports/asff/sast.json
+      - python3 scripts/convert_findings.py --kind dependency-check --input reports/sca/dependency-check-report.json --output reports/asff/sca.json
+      - aws s3 cp reports "s3://${REPORT_BUCKET}/${REPORT_PREFIX}/${GIT_SHA}/sca-sast/" --recursive
+      - |
+        if [ "${ENABLE_SECURITY_HUB_IMPORT}" = "true" ]; then
+          python3 scripts/import_findings.py reports/asff/sast.json
+          python3 scripts/import_findings.py reports/asff/sca.json
+        fi
+      - python3 scripts/enforce_thresholds.py --input reports/asff/sast.json --input reports/asff/sca.json

@@ -1,0 +1,41 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+      python: 3.11
+    commands:
+      - mkdir -p reports/dast reports/asff
+      - cd app
+      - npm install
+      - cd "$CODEBUILD_SRC_DIR"
+  pre_build:
+    commands:
+      - docker build -t devsecops-demo-app ./app
+      - docker run -d --name devsecops-demo-app -p 3000:3000 devsecops-demo-app
+      - |
+        for attempt in 1 2 3 4 5 6 7 8 9 10; do
+          if curl -fsS http://127.0.0.1:3000/health; then
+            break
+          fi
+          sleep 3
+        done
+      - curl -fsS http://127.0.0.1:3000/health
+  build:
+    commands:
+      - |
+        docker run --rm --network host \
+          -v "$CODEBUILD_SRC_DIR/reports/dast:/zap/wrk" \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py -t http://127.0.0.1:3000 -J zap.json -r zap.html -m 2 || true
+  post_build:
+    commands:
+      - docker rm -f devsecops-demo-app || true
+      - python3 scripts/convert_findings.py --kind zap --input reports/dast/zap.json --output reports/asff/dast.json
+      - aws s3 cp reports "s3://${REPORT_BUCKET}/${REPORT_PREFIX}/${GIT_SHA}/dast/" --recursive
+      - |
+        if [ "${ENABLE_SECURITY_HUB_IMPORT}" = "true" ]; then
+          python3 scripts/import_findings.py reports/asff/dast.json
+        fi
+      - python3 scripts/enforce_thresholds.py --input reports/asff/dast.json
