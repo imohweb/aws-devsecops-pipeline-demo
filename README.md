@@ -157,6 +157,8 @@ If `ENABLE_SECURITY_HUB_IMPORT=true`, the build converts findings to ASFF and at
 
 Use [docs/demo-runbook.md](docs/demo-runbook.md) as the live presentation guide.
 
+For AWS stack deployment prerequisites and error-prevention guidance, use [docs/aws-deployment-prerequisites.md](docs/aws-deployment-prerequisites.md).
+
 ## Key Files
 
 - `.github/workflows/devsecops-demo.yml`
