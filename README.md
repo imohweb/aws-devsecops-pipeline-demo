@@ -63,7 +63,6 @@ Do not use the sample application as production code.
 - A GitHub repository containing this demo pack
 - GitHub repository permissions to configure:
   - Actions
-  - Repository variables
   - Repository secrets
 
 ## Quick Start
@@ -93,25 +92,20 @@ If the account already has the GitHub OIDC provider, pass this additional parame
 ExistingGitHubOidcProviderArn=arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com
 ```
 
-### 3. Configure GitHub repository variables
+### 3. Workflow configuration
 
-Set these repository variables:
+The workflow currently carries its non-secret configuration directly in `.github/workflows/devsecops-demo.yml`.
 
-- `AWS_REGION`
-- `CODEBUILD_PROJECT_NAME`
-- `ARTIFACT_BUCKET`
-- `REPORT_PREFIX`
-- `ENABLE_SECURITY_HUB_IMPORT`
-
-Recommended values:
+Current values:
 
 ```text
 AWS_REGION=us-east-1
-CODEBUILD_PROJECT_NAME=devsecops-demo-deep-scans
-ARTIFACT_BUCKET=<stack output bucket name>
+STACK_NAME=devsecops-demo-pack
 REPORT_PREFIX=reports
 ENABLE_SECURITY_HUB_IMPORT=false
 ```
+
+At runtime, GitHub Actions resolves `ArtifactBucketName` and `CodeBuildProjectName` from the CloudFormation stack outputs, so those values do not need to be copied into GitHub.
 
 ### 4. Configure GitHub repository secret
 
@@ -141,6 +135,23 @@ Set an Actions secret named `NVD_API_KEY` if you want faster and more reliable N
 - Waits for completion.
 - Starts CodeBuild stage 2 with `ci/buildspecs/dast.yml`.
 - Waits for completion.
+
+### What the deep scan actually does
+
+- Stage 1 is the SCA/SAST pass.
+- CodeBuild installs the app dependencies and runs the unit tests again inside the managed build environment.
+- `Semgrep` scans the source code for insecure patterns such as dangerous functions and weak coding practices.
+- `OWASP Dependency-Check` scans third-party packages for known CVEs using NVD vulnerability data.
+- Raw findings are written into `reports/sca/` and `reports/sast/`.
+
+### What happens after the deep scan
+
+- The raw scanner outputs are converted into AWS Security Finding Format payloads.
+- All reports are uploaded to S3 under `reports/<commit-sha>/sca-sast/` for retention and later review.
+- If `ENABLE_SECURITY_HUB_IMPORT=true`, the ASFF findings are imported into AWS Security Hub.
+- The pipeline then enforces a severity gate using `scripts/enforce_thresholds.py`.
+- By default, any finding at severity `HIGH` or above causes the stage to fail.
+- If the first stage passes, the workflow launches the DAST stage, which runs OWASP ZAP against the app and applies the same reporting and threshold pattern.
 
 ## Security Hub Import Notes
 

@@ -45,6 +45,11 @@ Demonstrate:
 - Stage 2 for DAST
 - Build logs
 
+Narration:
+- Stage 1 is the deeper analysis pass that runs inside AWS CodeBuild rather than on the GitHub runner.
+- It reruns tests in the managed build environment, then performs SCA with OWASP Dependency-Check and SAST with Semgrep.
+- This is where the audience should understand that the pipeline moves from fast feedback into security evidence generation.
+
 ### Part 5: Show report retention
 
 Open the S3 prefix:
@@ -57,6 +62,16 @@ Explain:
 - raw scan reports are retained
 - ASFF payloads are retained
 - this supports audit and post-incident review
+- this is what happens after the deep scan completes successfully
+
+### Part 5b: Explain the decision point after deep scan
+
+Explain:
+- findings are normalized into ASFF-shaped JSON for consistency
+- the pipeline checks the findings against a severity threshold
+- by default, any `HIGH` or `CRITICAL` finding fails the stage
+- if the SCA/SAST stage passes, the workflow moves on to DAST
+- if Security Hub import is enabled, the same findings can also be viewed in AWS Security Hub
 
 ### Part 6: Optional Security Hub demo
 
@@ -73,4 +88,3 @@ If Dependency-Check updates slowly:
 
 If ZAP takes longer than expected:
 - show the DAST buildspec and describe the local staging deployment inside CodeBuild
-
