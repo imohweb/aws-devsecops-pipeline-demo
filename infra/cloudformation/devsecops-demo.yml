@@ -144,10 +144,6 @@ Resources:
                   - codebuild:StartBuild
                   - codebuild:BatchGetBuilds
                 Resource: !GetAtt CodeBuildProject.Arn
-              - Effect: Allow
-                Action:
-                  - cloudformation:DescribeStacks
-                Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
 
 Outputs:
   ArtifactBucketName:
