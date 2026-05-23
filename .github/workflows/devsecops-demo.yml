@@ -13,6 +13,11 @@ permissions:
 
 env:
   APP_DIR: app
+  AWS_REGION: us-east-1
+  CODEBUILD_PROJECT_NAME: devsecops-demo-deep-scans
+  ARTIFACT_BUCKET: evsecops-demo-pack-artifactbucket-t9m4njqvwek9
+  REPORT_PREFIX: reports
+  ENABLE_SECURITY_HUB_IMPORT: "false"
 
 jobs:
   fast-feedback:
@@ -45,7 +50,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
 
       - name: Package repository source
@@ -53,18 +58,18 @@ jobs:
 
       - name: Upload source bundle to S3
         env:
-          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
+          ARTIFACT_BUCKET: ${{ env.ARTIFACT_BUCKET }}
         run: |
           aws s3 cp source-bundle.zip "s3://${ARTIFACT_BUCKET}/sources/${GITHUB_SHA}.zip"
 
       - name: Start SCA and SAST build
         id: sca_sast
         env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
-          CODEBUILD_PROJECT_NAME: ${{ vars.CODEBUILD_PROJECT_NAME }}
-          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
-          REPORT_PREFIX: ${{ vars.REPORT_PREFIX }}
-          ENABLE_SECURITY_HUB_IMPORT: ${{ vars.ENABLE_SECURITY_HUB_IMPORT }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          CODEBUILD_PROJECT_NAME: ${{ env.CODEBUILD_PROJECT_NAME }}
+          ARTIFACT_BUCKET: ${{ env.ARTIFACT_BUCKET }}
+          REPORT_PREFIX: ${{ env.REPORT_PREFIX }}
+          ENABLE_SECURITY_HUB_IMPORT: ${{ env.ENABLE_SECURITY_HUB_IMPORT }}
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           BUILD_ID=$(aws codebuild start-build \
@@ -90,11 +95,11 @@ jobs:
       - name: Start DAST build
         id: dast
         env:
-          AWS_REGION: ${{ vars.AWS_REGION }}
-          CODEBUILD_PROJECT_NAME: ${{ vars.CODEBUILD_PROJECT_NAME }}
-          ARTIFACT_BUCKET: ${{ vars.ARTIFACT_BUCKET }}
-          REPORT_PREFIX: ${{ vars.REPORT_PREFIX }}
-          ENABLE_SECURITY_HUB_IMPORT: ${{ vars.ENABLE_SECURITY_HUB_IMPORT }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          CODEBUILD_PROJECT_NAME: ${{ env.CODEBUILD_PROJECT_NAME }}
+          ARTIFACT_BUCKET: ${{ env.ARTIFACT_BUCKET }}
+          REPORT_PREFIX: ${{ env.REPORT_PREFIX }}
+          ENABLE_SECURITY_HUB_IMPORT: ${{ env.ENABLE_SECURITY_HUB_IMPORT }}
         run: |
           BUILD_ID=$(aws codebuild start-build \
             --project-name "${CODEBUILD_PROJECT_NAME}" \
