@@ -38,77 +38,111 @@ README.md
 ## Architecture
 
 ```mermaid
-flowchart TD
-    A[Developer Push or Pull Request] --> B[GitHub Repository]
-    B --> C[GitHub Actions Workflow]
-    C --> D[Fast Feedback Job]
-    D --> D1[npm install]
-    D --> D2[Unit Tests]
+flowchart LR
+    DEV[Developer]
 
-    C --> E{Event Type}
-    E -->|pull_request| F[Stop After Fast Feedback]
-    E -->|push to main or workflow_dispatch| G[Assume AWS Role via GitHub OIDC]
+    subgraph GH[GitHub]
+        REPO[Repository]
+        WF[GitHub Actions workflow<br/>.github/workflows/devsecops-demo.yml]
+        FF[fast-feedback job<br/>npm install + npm test]
+        OIDC[GitHub OIDC token]
+    end
 
-    G --> H[Package Repository]
-    H --> I[Upload source-bundle.zip to S3 Artifact Bucket]
-    I --> J[Start CodeBuild Stage 1: SCA and SAST]
+    subgraph AWS[AWS Account]
+        ROLE[GitHubActionsRole<br/>devsecops-demo-github-actions-role]
+        S3[(ArtifactBucket<br/>source bundles + reports)]
+        CB[CodeBuildProject<br/>devsecops-demo-deep-scans]
 
-    J --> J1[Run tests in CodeBuild]
-    J --> J2[Semgrep SAST scan]
-    J --> J3[OWASP Dependency-Check SCA scan]
-    J --> J4[Convert findings to ASFF JSON]
-    J --> J5[Upload reports to S3 reports/commit-sha/sca-sast]
-    J --> J6[Enforce severity threshold]
+        subgraph SCA1[CodeBuild Stage 1]
+            T1[Run tests]
+            SG[Semgrep SAST]
+            DC[OWASP Dependency-Check SCA]
+            CV1[convert_findings.py]
+            GT1[enforce_thresholds.py<br/>FAIL_ON_SEVERITY=CRITICAL]
+        end
 
-    J6 -->|pass| K[Start CodeBuild Stage 2: DAST]
-    J6 -->|fail| L[Pipeline Fails]
+        subgraph DAST2[CodeBuild Stage 2]
+            APP[Build and run sample app]
+            ZAP[OWASP ZAP baseline scan]
+            CV2[convert_findings.py]
+            GT2[enforce_thresholds.py<br/>FAIL_ON_SEVERITY=CRITICAL]
+        end
 
-    K --> K1[Build sample app container]
-    K --> K2[Run app locally inside CodeBuild]
-    K --> K3[OWASP ZAP baseline scan]
-    K --> K4[Convert findings to ASFF JSON]
-    K --> K5[Upload reports to S3 reports/commit-sha/dast]
-    K --> K6[Enforce severity threshold]
+        SH[AWS Security Hub<br/>optional import]
+        CW[CloudWatch Logs]
+    end
 
-    J5 --> M[(S3 Reports Bucket)]
-    K5 --> M
-    J4 --> N{Security Hub Import Enabled}
-    K4 --> N
-    N -->|true| O[AWS Security Hub]
-    N -->|false| P[Keep findings in S3 only]
+    DEV --> REPO
+    REPO --> WF
+    WF --> FF
+    WF -->|push main or workflow_dispatch| OIDC
+    OIDC --> ROLE
+    ROLE -->|aws s3 cp source-bundle.zip| S3
+    ROLE -->|aws codebuild start-build| CB
+
+    S3 -->|source ZIP| CB
+    CB --> T1 --> SG --> DC --> CV1 --> GT1
+    GT1 -->|reports/sca-sast| S3
+    GT1 -->|if pass| APP
+    GT1 -->|optional ASFF import| SH
+    CB --> CW
+
+    APP --> ZAP --> CV2 --> GT2
+    GT2 -->|reports/dast| S3
+    GT2 -->|optional ASFF import| SH
+    GT2 -->|final pass/fail| WF
 ```
 
-### Architecture walkthrough
+### What this architecture actually represents
 
-1. A developer opens a pull request or pushes to `main`.
-2. GitHub Actions always starts with the `fast-feedback` job on the GitHub runner.
-3. For pull requests, the pipeline stops after fast feedback so contributors get quick signal without invoking AWS.
-4. For pushes to `main` and manual runs, GitHub Actions assumes the AWS IAM role through GitHub OIDC.
-5. The workflow packages the repository into `source-bundle.zip` and uploads it to the S3 artifact bucket.
-6. GitHub Actions starts the first CodeBuild stage with `ci/buildspecs/sca-sast.yml`.
-7. CodeBuild reruns tests, performs SAST with Semgrep, and performs SCA with OWASP Dependency-Check.
-8. The raw findings are converted into AWS Security Finding Format shaped JSON and uploaded to S3 for retention.
-9. The stage applies a severity gate through `scripts/enforce_thresholds.py`; in the current demo configuration only `CRITICAL` findings fail the stage.
-10. If the SCA/SAST stage passes, GitHub Actions starts the DAST stage with `ci/buildspecs/dast.yml`.
-11. The DAST stage builds the sample app, runs it locally inside CodeBuild, scans it with OWASP ZAP, uploads the reports to S3, and applies the same severity gate.
-12. If `ENABLE_SECURITY_HUB_IMPORT=true`, the ASFF findings from both deep-scan stages are also imported into AWS Security Hub.
+This is the real execution model defined by this repository, not a generic CI/CD sketch:
 
-### Components and responsibilities
+- The entrypoint is the single GitHub Actions workflow in `.github/workflows/devsecops-demo.yml`.
+- The AWS side is provisioned by `infra/cloudformation/devsecops-demo.yml`.
+- The trust boundary is GitHub OIDC into the IAM role `devsecops-demo-github-actions-role`.
+- The workflow uploads a source bundle into the S3 artifact bucket and then starts the CodeBuild project `devsecops-demo-deep-scans`.
+- Deep scanning is split into two real buildspecs:
+  - `ci/buildspecs/sca-sast.yml`
+  - `ci/buildspecs/dast.yml`
+- Findings are normalized by `scripts/convert_findings.py`.
+- Pass/fail is controlled by `scripts/enforce_thresholds.py` with `FAIL_ON_SEVERITY=CRITICAL`.
 
-- `GitHub Actions`
-  - Orchestrates the workflow, decides whether AWS deep scans should run, and waits for CodeBuild completion.
-- `GitHub OIDC + IAM Role`
-  - Removes the need for long-lived AWS access keys in GitHub by using short-lived role assumption.
-- `S3 Artifact Bucket`
-  - Stores the source bundle that CodeBuild consumes and keeps generated reports for audit and demo review.
-- `CodeBuild Stage 1`
-  - Performs SCA and SAST in a managed AWS execution environment.
-- `CodeBuild Stage 2`
-  - Performs DAST by running the application and scanning it dynamically with OWASP ZAP.
-- `ASFF Conversion Scripts`
-  - Normalize different scanner outputs into a consistent format that can be retained or imported.
-- `Security Hub`
-  - Optional destination for centralized findings visibility inside AWS.
+### Flow by boundary
+
+1. `GitHub`
+   The workflow always runs `fast-feedback` first on the GitHub-hosted runner.
+2. `GitHub -> AWS trust`
+   On `push` to `main` or `workflow_dispatch`, GitHub exchanges its OIDC token for temporary AWS credentials by assuming `devsecops-demo-github-actions-role`.
+3. `Artifact handoff`
+   GitHub packages the repo with `scripts/package_source.sh` and uploads `source-bundle.zip` to the S3 artifact bucket.
+4. `Managed deep scan execution`
+   GitHub starts `devsecops-demo-deep-scans` in CodeBuild. CodeBuild pulls the uploaded ZIP from S3 and executes the selected buildspec.
+5. `Stage 1: SCA and SAST`
+   CodeBuild reruns tests, runs Semgrep, runs OWASP Dependency-Check, converts outputs to ASFF-shaped JSON, uploads reports to S3, and applies the severity gate.
+6. `Stage 2: DAST`
+   If Stage 1 passes, CodeBuild builds and runs the sample app locally, scans it with OWASP ZAP, uploads reports to S3, and applies the same gate.
+7. `Outputs`
+   Reports are retained in S3, logs are retained in CloudWatch Logs, and findings can optionally be imported into Security Hub.
+
+### Actual resources in this project
+
+- `GitHubActionsRole`
+  - `devsecops-demo-github-actions-role`
+- `CodeBuildProject`
+  - `devsecops-demo-deep-scans`
+- `CodeBuildServiceRole`
+  - `devsecops-demo-codebuild-role`
+- `ArtifactBucket`
+  - currently configured in the workflow as `devsecops-demo-pack-artifactbucket-t9m4njqvwek9`
+- `CloudWatch Logs`
+  - `/aws/codebuild/devsecops-demo-deep-scans`
+
+### Why the architecture is split this way
+
+- `fast-feedback` stays in GitHub for quick developer signal.
+- deeper security tooling runs in CodeBuild so the scans execute in a managed AWS environment with Docker support and AWS-native report retention.
+- S3 is the handoff point between orchestration and scan execution.
+- OIDC removes the need to store long-lived AWS access keys in GitHub.
 
 ## Intentionally Insecure Demo Content
 
