@@ -250,6 +250,69 @@ Set an Actions secret named `NVD_API_KEY` if you want faster and more reliable N
 - The threshold is configurable through `FAIL_ON_SEVERITY`; the current demo uses `CRITICAL` so `HIGH` findings are retained in reports without failing the build.
 - If the first stage passes, the workflow launches the DAST stage, which runs OWASP ZAP against the app and applies the same reporting and threshold pattern.
 
+### Report flow and decision points
+
+```mermaid
+flowchart LR
+    S1[Semgrep JSON] --> C1[convert_findings.py]
+    S2[Dependency-Check JSON] --> C2[convert_findings.py]
+    S3[ZAP JSON and HTML] --> C3[convert_findings.py]
+
+    C1 --> A1[ASFF SAST findings]
+    C2 --> A2[ASFF SCA findings]
+    C3 --> A3[ASFF DAST findings]
+
+    A1 --> B[(S3 reports/commit-sha/sca-sast)]
+    A2 --> B
+    A3 --> D[(S3 reports/commit-sha/dast)]
+
+    A1 --> G[enforce_thresholds.py]
+    A2 --> G
+    A3 --> H[enforce_thresholds.py]
+
+    G -->|severity below threshold| I[Proceed to next stage]
+    G -->|severity at or above threshold| J[Fail current stage]
+    H -->|severity below threshold| K[Workflow succeeds]
+    H -->|severity at or above threshold| L[Workflow fails]
+
+    A1 --> M{Security Hub import enabled}
+    A2 --> M
+    A3 --> M
+    M -->|true| N[AWS Security Hub]
+    M -->|false| O[Reports stay in S3 only]
+```
+
+For presentation, the key message is that the reports drive two different outcomes:
+
+- `Evidence retention`
+  - Raw and normalized findings are stored in S3 for later review, audit, and demos.
+- `Pipeline decision`
+  - The normalized findings are evaluated against the configured severity threshold.
+- `Optional central visibility`
+  - If enabled, the same normalized findings are also imported into Security Hub.
+
+### How to use the reports for decisions
+
+- `SAST report`
+  - Use it to decide whether the code contains risky implementation patterns that should be fixed before promotion.
+- `SCA report`
+  - Use it to decide whether vulnerable dependencies should be upgraded, pinned differently, or removed.
+- `DAST report`
+  - Use it to decide whether the running application exposes web security weaknesses that block release.
+- `ASFF JSON`
+  - Use it for automation, triage workflows, and consistent severity handling across tools.
+
+### Recommended decision model for the session
+
+- `CRITICAL`
+  - stop promotion immediately and require remediation
+- `HIGH`
+  - allow the demo to continue, but create a remediation action item
+- `MEDIUM`
+  - track in backlog and schedule based on risk and exploitability
+- `LOW` or `INFORMATIONAL`
+  - document and monitor, but do not block delivery
+
 ## Security Hub Import Notes
 
 This demo pack includes optional ASFF export and Security Hub import.
