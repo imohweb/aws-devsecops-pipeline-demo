@@ -47,6 +47,28 @@ What the script does:
 4. Deletes the CloudFormation stack.
 5. Waits until the stack deletion completes.
 
+## Verify The Bucket Is Empty
+
+If you need to confirm the artifact bucket is already empty before deleting the stack, run:
+
+```bash
+aws s3api list-object-versions \
+  --region us-east-1 \
+  --bucket devsecops-demo-pack-artifactbucket-t9m4njqvwek9 \
+  --output json
+```
+
+If the output only shows values like:
+
+```json
+{
+  "RequestCharged": null,
+  "Prefix": ""
+}
+```
+
+then there are no remaining objects, object versions, or delete markers in the bucket.
+
 ## If You Need Manual Commands Instead
 
 If you prefer to run the cleanup manually, use:
@@ -59,7 +81,7 @@ aws cloudformation describe-stacks \
   --output text
 ```
 
-Then delete the stack after the bucket is empty:
+If the bucket is empty, you can delete the stack directly:
 
 ```bash
 aws cloudformation delete-stack \
@@ -70,6 +92,16 @@ aws cloudformation wait stack-delete-complete \
   --region us-east-1 \
   --stack-name devsecops-demo-pack
 ```
+
+Then verify the stack is gone:
+
+```bash
+aws cloudformation describe-stacks \
+  --region us-east-1 \
+  --stack-name devsecops-demo-pack
+```
+
+That final command should fail once deletion is complete.
 
 ## How To Decide About The GitHub OIDC Provider
 

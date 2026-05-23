@@ -33,17 +33,31 @@ get_stack_output() {
     --output text
 }
 
-delete_s3_batch() {
+get_s3_object_list() {
   local bucket_name="$1"
   local query="$2"
-  local payload
 
-  payload="$(mktemp)"
   aws s3api list-object-versions \
     --region "$AWS_REGION" \
     --bucket "$bucket_name" \
     --query "$query" \
-    --output json >"$payload"
+    --output json
+}
+
+delete_s3_batch() {
+  local bucket_name="$1"
+  local query="$2"
+  local object_list
+  local payload
+
+  object_list="$(get_s3_object_list "$bucket_name" "$query")"
+
+  if [[ "$object_list" == "null" || "$object_list" == "[]" ]]; then
+    return 1
+  fi
+
+  payload="$(mktemp)"
+  printf '{ "Objects": %s }\n' "$object_list" >"$payload"
 
   if grep -q '"Key"' "$payload"; then
     aws s3api delete-objects \
@@ -53,28 +67,27 @@ delete_s3_batch() {
   fi
 
   rm -f "$payload"
+  return 0
 }
 
 empty_versioned_bucket() {
   local bucket_name="$1"
+  local versions
+  local delete_markers
 
   log "Removing current objects from s3://$bucket_name"
   aws s3 rm "s3://$bucket_name" --region "$AWS_REGION" --recursive >/dev/null 2>&1 || true
 
   while true; do
-    delete_s3_batch "$bucket_name" '{Objects: Versions[].{Key: Key, VersionId: VersionId}, Quiet: true}'
-    delete_s3_batch "$bucket_name" '{Objects: DeleteMarkers[].{Key: Key, VersionId: VersionId}, Quiet: true}'
+    versions="$(get_s3_object_list "$bucket_name" 'Versions[].{Key: Key, VersionId: VersionId}')"
+    delete_markers="$(get_s3_object_list "$bucket_name" 'DeleteMarkers[].{Key: Key, VersionId: VersionId}')"
 
-    local remaining
-    remaining="$(aws s3api list-object-versions \
-      --region "$AWS_REGION" \
-      --bucket "$bucket_name" \
-      --query 'length(Versions[]) + length(DeleteMarkers[])' \
-      --output text)"
-
-    if [[ "$remaining" == "0" || "$remaining" == "None" ]]; then
+    if [[ ( "$versions" == "null" || "$versions" == "[]" ) && ( "$delete_markers" == "null" || "$delete_markers" == "[]" ) ]]; then
       break
     fi
+
+    delete_s3_batch "$bucket_name" 'Versions[].{Key: Key, VersionId: VersionId}' || true
+    delete_s3_batch "$bucket_name" 'DeleteMarkers[].{Key: Key, VersionId: VersionId}' || true
   done
 }
 
