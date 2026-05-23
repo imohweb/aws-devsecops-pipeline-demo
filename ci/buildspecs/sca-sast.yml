@@ -39,4 +39,4 @@ phases:
           python3 scripts/import_findings.py reports/asff/sast.json
           python3 scripts/import_findings.py reports/asff/sca.json
         fi
-      - python3 scripts/enforce_thresholds.py --input reports/asff/sast.json --input reports/asff/sca.json
+      - python3 scripts/enforce_thresholds.py --fail-on "${FAIL_ON_SEVERITY:-HIGH}" --input reports/asff/sast.json --input reports/asff/sca.json

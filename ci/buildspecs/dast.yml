@@ -38,4 +38,4 @@ phases:
         if [ "${ENABLE_SECURITY_HUB_IMPORT}" = "true" ]; then
           python3 scripts/import_findings.py reports/asff/dast.json
         fi
-      - python3 scripts/enforce_thresholds.py --input reports/asff/dast.json
+      - python3 scripts/enforce_thresholds.py --fail-on "${FAIL_ON_SEVERITY:-HIGH}" --input reports/asff/dast.json

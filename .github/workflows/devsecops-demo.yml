@@ -18,6 +18,7 @@ env:
   ARTIFACT_BUCKET: devsecops-demo-pack-artifactbucket-t9m4njqvwek9
   REPORT_PREFIX: reports
   ENABLE_SECURITY_HUB_IMPORT: "false"
+  FAIL_ON_SEVERITY: CRITICAL
 
 jobs:
   fast-feedback:
@@ -70,6 +71,7 @@ jobs:
           ARTIFACT_BUCKET: ${{ env.ARTIFACT_BUCKET }}
           REPORT_PREFIX: ${{ env.REPORT_PREFIX }}
           ENABLE_SECURITY_HUB_IMPORT: ${{ env.ENABLE_SECURITY_HUB_IMPORT }}
+          FAIL_ON_SEVERITY: ${{ env.FAIL_ON_SEVERITY }}
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
           BUILD_ID=$(aws codebuild start-build \
@@ -81,6 +83,7 @@ jobs:
               name=REPORT_BUCKET,value="${ARTIFACT_BUCKET}",type=PLAINTEXT \
               name=REPORT_PREFIX,value="${REPORT_PREFIX}",type=PLAINTEXT \
               name=ENABLE_SECURITY_HUB_IMPORT,value="${ENABLE_SECURITY_HUB_IMPORT}",type=PLAINTEXT \
+              name=FAIL_ON_SEVERITY,value="${FAIL_ON_SEVERITY}",type=PLAINTEXT \
               name=GIT_SHA,value="${GITHUB_SHA}",type=PLAINTEXT \
               name=NVD_API_KEY,value="${NVD_API_KEY}",type=PLAINTEXT \
             --query 'build.id' \
@@ -100,6 +103,7 @@ jobs:
           ARTIFACT_BUCKET: ${{ env.ARTIFACT_BUCKET }}
           REPORT_PREFIX: ${{ env.REPORT_PREFIX }}
           ENABLE_SECURITY_HUB_IMPORT: ${{ env.ENABLE_SECURITY_HUB_IMPORT }}
+          FAIL_ON_SEVERITY: ${{ env.FAIL_ON_SEVERITY }}
         run: |
           BUILD_ID=$(aws codebuild start-build \
             --project-name "${CODEBUILD_PROJECT_NAME}" \
@@ -110,6 +114,7 @@ jobs:
               name=REPORT_BUCKET,value="${ARTIFACT_BUCKET}",type=PLAINTEXT \
               name=REPORT_PREFIX,value="${REPORT_PREFIX}",type=PLAINTEXT \
               name=ENABLE_SECURITY_HUB_IMPORT,value="${ENABLE_SECURITY_HUB_IMPORT}",type=PLAINTEXT \
+              name=FAIL_ON_SEVERITY,value="${FAIL_ON_SEVERITY}",type=PLAINTEXT \
               name=GIT_SHA,value="${GITHUB_SHA}",type=PLAINTEXT \
             --query 'build.id' \
             --output text)
