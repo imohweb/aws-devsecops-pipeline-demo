@@ -6,7 +6,7 @@ Use this runbook during the live session.
 
 1. Push this repository to GitHub.
 2. Deploy `infra/cloudformation/devsecops-demo.yml`.
-3. Configure the GitHub repository variables and secret.
+3. Configure the GitHub repository secrets.
 4. Confirm Security Hub is enabled if you want live findings import.
 
 ## Live demo sequence

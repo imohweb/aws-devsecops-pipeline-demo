@@ -167,4 +167,4 @@ NVD_API_KEY=<optional>
 
 ## 11. Trigger The Workflow
 
-After GitHub variables and secrets are set, you can trigger the workflow by pushing to `main` or by running it manually in GitHub Actions.
+After the GitHub secrets are set, you can trigger the workflow by pushing to `main` or by running it manually in GitHub Actions.

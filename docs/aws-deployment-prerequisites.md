@@ -109,27 +109,20 @@ aws cloudformation deploy \
 
 The CloudFormation stack deploys AWS resources only. It does not configure your GitHub repository settings.
 
-After the stack succeeds, set these GitHub repository variables:
-
-- `AWS_REGION`
-- `CODEBUILD_PROJECT_NAME`
-- `ARTIFACT_BUCKET`
-- `REPORT_PREFIX`
-- `ENABLE_SECURITY_HUB_IMPORT`
-
-Recommended values:
+After the stack succeeds, the non-secret workflow configuration is already carried in `.github/workflows/devsecops-demo.yml`:
 
 ```text
 AWS_REGION=us-east-1
 CODEBUILD_PROJECT_NAME=devsecops-demo-deep-scans
-ARTIFACT_BUCKET=<stack output bucket name>
+ARTIFACT_BUCKET=devsecops-demo-pack-artifactbucket-t9m4njqvwek9
 REPORT_PREFIX=reports
 ENABLE_SECURITY_HUB_IMPORT=false
 ```
 
-Set this GitHub repository secret:
+Set these GitHub repository secrets:
 
 - `AWS_ROLE_ARN`
+- `NVD_API_KEY` if you want faster and more reliable Dependency-Check updates
 
 Use the `GitHubActionsRoleArn` stack output.
 
