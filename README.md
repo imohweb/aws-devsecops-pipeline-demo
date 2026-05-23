@@ -224,6 +224,20 @@ Use the `GitHubActionsRoleArn` CloudFormation stack output.
 
 Set an Actions secret named `NVD_API_KEY` if you want faster and more reliable NVD updates for OWASP Dependency-Check.
 
+## Cleanup
+
+Use [docs/cleanup-demo-resources.md](docs/cleanup-demo-resources.md) to remove the AWS resources after the demo.
+
+The short version is:
+
+```bash
+cd devsecops-demo-pack
+chmod +x scripts/teardown_demo.sh
+AWS_REGION=us-east-1 STACK_NAME=devsecops-demo-pack ./scripts/teardown_demo.sh
+```
+
+This script empties the versioned artifact bucket and then deletes the CloudFormation stack. If the GitHub OIDC provider was pre-existing and supplied through `ExistingGitHubOidcProviderArn`, it is not deleted.
+
 ## How the Pipeline Works
 
 ### Pull request path
