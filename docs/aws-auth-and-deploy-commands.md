@@ -53,7 +53,38 @@ aws cloudformation deploy \
     GitHubRepo=aws-devsecops-pipeline-demo
 ```
 
-## 5. Deploy If GitHub OIDC Provider Already Exists
+## 5. What This Deploy Command Actually Does
+
+This command provisions the AWS-side infrastructure for the demo pipeline.
+
+It creates or configures:
+
+- the S3 artifact bucket
+- the CodeBuild project
+- the CodeBuild IAM role
+- the GitHub Actions IAM role
+- the GitHub OIDC provider in AWS, if it does not already exist
+- the IAM trust policy that allows GitHub Actions from `imohweb/aws-devsecops-pipeline-demo` to assume the role
+
+For GitHub OIDC specifically:
+
+- the audience is `sts.amazonaws.com`
+- the repository subject pattern is `repo:imohweb/aws-devsecops-pipeline-demo:*`
+
+This means GitHub Actions can assume the AWS role using short-lived OIDC federation instead of storing long-lived AWS access keys in GitHub.
+
+## 6. What This Deploy Command Does Not Do
+
+This command does not configure the GitHub repository itself.
+
+You still need to add the GitHub Actions secrets manually in GitHub:
+
+- repository secret `AWS_ROLE_ARN`
+- repository secret `NVD_API_KEY` if you want faster and more reliable Dependency-Check updates
+
+That is why the CloudFormation deployment is only the AWS-side setup. The GitHub-side settings are a separate step.
+
+## 7. Deploy If GitHub OIDC Provider Already Exists
 
 Use this version only if your AWS account already has the GitHub OIDC provider:
 
@@ -70,7 +101,9 @@ aws cloudformation deploy \
     ExistingGitHubOidcProviderArn=arn:aws:iam::<your-account-id>:oidc-provider/token.actions.githubusercontent.com
 ```
 
-## 6. Get Stack Outputs After Deployment
+If your stack deploy succeeded without this parameter, then the stack most likely created the provider for you, or there was no conflict with an existing provider.
+
+## 8. Get Stack Outputs After Deployment
 
 ```bash
 aws cloudformation describe-stacks \
@@ -80,7 +113,7 @@ aws cloudformation describe-stacks \
   --output table
 ```
 
-## 7. Optional Checks
+## 9. Optional Checks
 
 Check whether the GitHub OIDC provider already exists:
 
@@ -96,19 +129,35 @@ aws cloudformation describe-stacks \
   --stack-name devsecops-demo-pack
 ```
 
-## 8. GitHub Values To Set After Deployment
+Check the GitHub Actions role trust policy:
+
+```bash
+aws iam get-role \
+  --role-name devsecops-demo-github-actions-role \
+  --query 'Role.AssumeRolePolicyDocument' \
+  --output json
+```
+
+You want the trust policy to allow:
+
+```text
+repo:imohweb/aws-devsecops-pipeline-demo:*
+```
+
+## 10. GitHub Values To Set After Deployment
 
 Use the stack outputs to populate GitHub Actions settings.
 
-Repository variables:
+Workflow configuration:
 
 ```text
 AWS_REGION=us-east-1
-CODEBUILD_PROJECT_NAME=<CodeBuildProjectName output>
-ARTIFACT_BUCKET=<ArtifactBucketName output>
+STACK_NAME=devsecops-demo-pack
 REPORT_PREFIX=reports
 ENABLE_SECURITY_HUB_IMPORT=false
 ```
+
+The workflow resolves `ArtifactBucketName` and `CodeBuildProjectName` from the CloudFormation stack outputs at runtime, so you do not need to copy those values into GitHub.
 
 Repository secrets:
 
@@ -117,6 +166,6 @@ AWS_ROLE_ARN=<GitHubActionsRoleArn output>
 NVD_API_KEY=<optional>
 ```
 
-## 9. Trigger The Workflow
+## 11. Trigger The Workflow
 
 After GitHub variables and secrets are set, you can trigger the workflow by pushing to `main` or by running it manually in GitHub Actions.
