@@ -17,7 +17,7 @@ For this repository, the expected values are:
 ```text
 ProjectName=devsecops-demo
 GitHubOrg=imohweb
-GitHubRepo=-aws-devsecops-pipeline-demo
+GitHubRepo=aws-devsecops-pipeline-demo
 ```
 
 If your AWS account already has the GitHub OIDC provider configured, also provide:
@@ -87,7 +87,7 @@ aws cloudformation deploy \
   --parameter-overrides \
     ProjectName=devsecops-demo \
     GitHubOrg=imohweb \
-    GitHubRepo=-aws-devsecops-pipeline-demo
+    GitHubRepo=aws-devsecops-pipeline-demo
 ```
 
 If the GitHub OIDC provider already exists:
@@ -101,7 +101,7 @@ aws cloudformation deploy \
   --parameter-overrides \
     ProjectName=devsecops-demo \
     GitHubOrg=imohweb \
-    GitHubRepo=-aws-devsecops-pipeline-demo \
+    GitHubRepo=aws-devsecops-pipeline-demo \
     ExistingGitHubOidcProviderArn=arn:aws:iam::<account-id>:oidc-provider/token.actions.githubusercontent.com
 ```
 
@@ -156,7 +156,7 @@ After the stack finishes, confirm:
 2. The CodeBuild project exists.
 3. The GitHub Actions IAM role exists.
 4. The role trust policy includes your repository:
-   - `repo:imohweb/-aws-devsecops-pipeline-demo:*`
+   - `repo:imohweb/aws-devsecops-pipeline-demo:*`
 5. GitHub repo variables are populated.
 6. The GitHub secret `AWS_ROLE_ARN` is set.
 
