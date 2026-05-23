@@ -152,12 +152,11 @@ Workflow configuration:
 
 ```text
 AWS_REGION=us-east-1
-STACK_NAME=devsecops-demo-pack
+CODEBUILD_PROJECT_NAME=devsecops-demo-deep-scans
+ARTIFACT_BUCKET=devsecops-demo-pack-artifactbucket-t9m4njqvwek9
 REPORT_PREFIX=reports
 ENABLE_SECURITY_HUB_IMPORT=false
 ```
-
-The workflow resolves `ArtifactBucketName` and `CodeBuildProjectName` from the CloudFormation stack outputs at runtime, so you do not need to copy those values into GitHub.
 
 Repository secrets:
 

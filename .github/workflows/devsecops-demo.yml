@@ -14,7 +14,8 @@ permissions:
 env:
   APP_DIR: app
   AWS_REGION: us-east-1
-  STACK_NAME: devsecops-demo-pack
+  CODEBUILD_PROJECT_NAME: devsecops-demo-deep-scans
+  ARTIFACT_BUCKET: devsecops-demo-pack-artifactbucket-t9m4njqvwek9
   REPORT_PREFIX: reports
   ENABLE_SECURITY_HUB_IMPORT: "false"
 
@@ -54,21 +55,6 @@ jobs:
 
       - name: Package repository source
         run: ./scripts/package_source.sh
-
-      - name: Resolve stack outputs
-        run: |
-          ARTIFACT_BUCKET=$(aws cloudformation describe-stacks \
-            --region "${AWS_REGION}" \
-            --stack-name "${STACK_NAME}" \
-            --query "Stacks[0].Outputs[?OutputKey=='ArtifactBucketName'].OutputValue" \
-            --output text)
-          CODEBUILD_PROJECT_NAME=$(aws cloudformation describe-stacks \
-            --region "${AWS_REGION}" \
-            --stack-name "${STACK_NAME}" \
-            --query "Stacks[0].Outputs[?OutputKey=='CodeBuildProjectName'].OutputValue" \
-            --output text)
-          echo "ARTIFACT_BUCKET=${ARTIFACT_BUCKET}" >> "${GITHUB_ENV}"
-          echo "CODEBUILD_PROJECT_NAME=${CODEBUILD_PROJECT_NAME}" >> "${GITHUB_ENV}"
 
       - name: Upload source bundle to S3
         env:

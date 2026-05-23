@@ -100,12 +100,11 @@ Current values:
 
 ```text
 AWS_REGION=us-east-1
-STACK_NAME=devsecops-demo-pack
+CODEBUILD_PROJECT_NAME=devsecops-demo-deep-scans
+ARTIFACT_BUCKET=devsecops-demo-pack-artifactbucket-t9m4njqvwek9
 REPORT_PREFIX=reports
 ENABLE_SECURITY_HUB_IMPORT=false
 ```
-
-At runtime, GitHub Actions resolves `ArtifactBucketName` and `CodeBuildProjectName` from the CloudFormation stack outputs, so those values do not need to be copied into GitHub.
 
 ### 4. Configure GitHub repository secret
 
