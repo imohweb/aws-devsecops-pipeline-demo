@@ -37,60 +37,68 @@ README.md
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    DEV[Developer]
+```text
+                                DEVSECOPS DEMO PACK: REAL ARCHITECTURE
 
-    subgraph GH[GitHub]
-        REPO[Repository]
-        WF[GitHub Actions workflow<br/>.github/workflows/devsecops-demo.yml]
-        FF[fast-feedback job<br/>npm install + npm test]
-        OIDC[GitHub OIDC token]
-    end
+Developer
+  |
+  v
+GitHub repository
+  |
+  v
+.github/workflows/devsecops-demo.yml
+  |
+  +--> fast-feedback job on GitHub runner
+  |      - npm install
+  |      - npm test
+  |
+  +--> if event is pull_request
+  |      - stop here
+  |
+  +--> if event is push to main or workflow_dispatch
+         |
+         v
+    GitHub OIDC token
+         |
+         v
+    IAM role assumed in AWS
+    devsecops-demo-github-actions-role
+         |
+         +--> upload source-bundle.zip to S3
+         |      bucket: devsecops-demo-pack-artifactbucket-t9m4njqvwek9
+         |
+         +--> start CodeBuild project
+                project: devsecops-demo-deep-scans
+                |
+                +--> Stage 1: ci/buildspecs/sca-sast.yml
+                |      - rerun tests
+                |      - Semgrep SAST
+                |      - OWASP Dependency-Check SCA
+                |      - convert_findings.py
+                |      - enforce_thresholds.py
+                |      - upload sca-sast reports to S3
+                |      - optional import to Security Hub
+                |
+                +--> if Stage 1 passes
+                |      |
+                |      v
+                |   Stage 2: ci/buildspecs/dast.yml
+                |      - build sample app container
+                |      - run app locally in CodeBuild
+                |      - OWASP ZAP DAST
+                |      - convert_findings.py
+                |      - enforce_thresholds.py
+                |      - upload dast reports to S3
+                |      - optional import to Security Hub
+                |
+                +--> CloudWatch Logs
+                       /aws/codebuild/devsecops-demo-deep-scans
 
-    subgraph AWS[AWS Account]
-        ROLE[GitHubActionsRole<br/>devsecops-demo-github-actions-role]
-        S3[(ArtifactBucket<br/>source bundles + reports)]
-        CB[CodeBuildProject<br/>devsecops-demo-deep-scans]
-
-        subgraph SCA1[CodeBuild Stage 1]
-            T1[Run tests]
-            SG[Semgrep SAST]
-            DC[OWASP Dependency-Check SCA]
-            CV1[convert_findings.py]
-            GT1[enforce_thresholds.py<br/>FAIL_ON_SEVERITY=CRITICAL]
-        end
-
-        subgraph DAST2[CodeBuild Stage 2]
-            APP[Build and run sample app]
-            ZAP[OWASP ZAP baseline scan]
-            CV2[convert_findings.py]
-            GT2[enforce_thresholds.py<br/>FAIL_ON_SEVERITY=CRITICAL]
-        end
-
-        SH[AWS Security Hub<br/>optional import]
-        CW[CloudWatch Logs]
-    end
-
-    DEV --> REPO
-    REPO --> WF
-    WF --> FF
-    WF -->|push main or workflow_dispatch| OIDC
-    OIDC --> ROLE
-    ROLE -->|aws s3 cp source-bundle.zip| S3
-    ROLE -->|aws codebuild start-build| CB
-
-    S3 -->|source ZIP| CB
-    CB --> T1 --> SG --> DC --> CV1 --> GT1
-    GT1 -->|reports/sca-sast| S3
-    GT1 -->|if pass| APP
-    GT1 -->|optional ASFF import| SH
-    CB --> CW
-
-    APP --> ZAP --> CV2 --> GT2
-    GT2 -->|reports/dast| S3
-    GT2 -->|optional ASFF import| SH
-    GT2 -->|final pass/fail| WF
+Outputs
+  - S3 reports retained by commit SHA
+  - CloudWatch Logs for each CodeBuild execution
+  - optional AWS Security Hub findings
+  - final pass/fail returned to GitHub Actions
 ```
 
 ### What this architecture actually represents
@@ -252,34 +260,26 @@ Set an Actions secret named `NVD_API_KEY` if you want faster and more reliable N
 
 ### Report flow and decision points
 
-```mermaid
-flowchart LR
-    S1[Semgrep JSON] --> C1[convert_findings.py]
-    S2[Dependency-Check JSON] --> C2[convert_findings.py]
-    S3[ZAP JSON and HTML] --> C3[convert_findings.py]
+```text
+                           REPORT FLOW AND DECISION POINTS
 
-    C1 --> A1[ASFF SAST findings]
-    C2 --> A2[ASFF SCA findings]
-    C3 --> A3[ASFF DAST findings]
-
-    A1 --> B[(S3 reports/commit-sha/sca-sast)]
-    A2 --> B
-    A3 --> D[(S3 reports/commit-sha/dast)]
-
-    A1 --> G[enforce_thresholds.py]
-    A2 --> G
-    A3 --> H[enforce_thresholds.py]
-
-    G -->|severity below threshold| I[Proceed to next stage]
-    G -->|severity at or above threshold| J[Fail current stage]
-    H -->|severity below threshold| K[Workflow succeeds]
-    H -->|severity at or above threshold| L[Workflow fails]
-
-    A1 --> M{Security Hub import enabled}
-    A2 --> M
-    A3 --> M
-    M -->|true| N[AWS Security Hub]
-    M -->|false| O[Reports stay in S3 only]
+Semgrep JSON --------------------+
+                                 |
+Dependency-Check JSON ---------- +--> convert_findings.py --> ASFF JSON findings
+                                 |                            |
+ZAP JSON / ZAP HTML ------------ +                            +--> stored in S3 reports/<commit-sha>/
+                                                              |
+                                                              +--> optional import to AWS Security Hub
+                                                              |
+                                                              +--> enforce_thresholds.py
+                                                                      |
+                                                                      +--> severity below threshold
+                                                                      |     - continue to next stage
+                                                                      |     - or complete workflow
+                                                                      |
+                                                                      +--> severity at or above threshold
+                                                                            - fail current stage
+                                                                            - fail workflow if final stage
 ```
 
 For presentation, the key message is that the reports drive two different outcomes:
