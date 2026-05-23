@@ -252,11 +252,20 @@ Set an Actions secret named `NVD_API_KEY` if you want faster and more reliable N
 ### What happens after the deep scan
 
 - The raw scanner outputs are converted into AWS Security Finding Format payloads.
+- Each stage now also produces an `executive-summary.html` file intended for browser viewing and non-technical stakeholders.
 - All reports are uploaded to S3 under `reports/<commit-sha>/sca-sast/` for retention and later review.
 - If `ENABLE_SECURITY_HUB_IMPORT=true`, the ASFF findings are imported into AWS Security Hub.
 - The pipeline then enforces a severity gate using `scripts/enforce_thresholds.py`.
 - The threshold is configurable through `FAIL_ON_SEVERITY`; the current demo uses `CRITICAL` so `HIGH` findings are retained in reports without failing the build.
 - If the first stage passes, the workflow launches the DAST stage, which runs OWASP ZAP against the app and applies the same reporting and threshold pattern.
+
+Typical report files after a successful run:
+
+- `reports/<commit-sha>/sca-sast/executive-summary.html`
+- `reports/<commit-sha>/sca-sast/asff/sast.json`
+- `reports/<commit-sha>/sca-sast/asff/sca.json`
+- `reports/<commit-sha>/dast/executive-summary.html`
+- `reports/<commit-sha>/dast/asff/dast.json`
 
 ### Report flow and decision points
 

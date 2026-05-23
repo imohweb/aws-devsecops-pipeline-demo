@@ -33,6 +33,7 @@ phases:
     commands:
       - docker rm -f devsecops-demo-app || true
       - python3 scripts/convert_findings.py --kind zap --input reports/dast/zap.json --output reports/asff/dast.json
+      - python3 scripts/generate_executive_summary.py --stage "DAST" --fail-on "${FAIL_ON_SEVERITY:-HIGH}" --input reports/asff/dast.json --output reports/executive-summary.html
       - aws s3 cp reports "s3://${REPORT_BUCKET}/${REPORT_PREFIX}/${GIT_SHA}/dast/" --recursive
       - |
         if [ "${ENABLE_SECURITY_HUB_IMPORT}" = "true" ]; then
